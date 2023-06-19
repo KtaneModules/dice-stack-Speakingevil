@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -238,6 +238,50 @@ public class DiceStackScript : MonoBehaviour {
                 displays[i].color = new Color(1, 1, 1);
             selectableHolder.SetActive(true);
             pressable = true;
+        }
+    }
+#pragma warning disable 414
+    private readonly string TwitchHelpMessage = @"!{0} <Up/Right/Down/Left/Push> [Rotates die with URDL. Moves stack down one die with Push. Chain with spaces.] | !{0} submit";
+#pragma warning restore 414
+
+    private IEnumerator ProcessTwitchCommand(string command)
+    {
+        if(command.ToLowerInvariant() == "submit")
+        {
+            yield return null;
+            buttons[4].OnInteract();
+            yield return new WaitForSeconds(1);
+        }
+        string[] commands = command.ToUpperInvariant().Split(' ').Select(x => x[0].ToString()).ToArray();
+        List<int> s = new List<int> { };
+        for(int i = 0; i < commands.Length; i++)
+        {
+            if (commands[i].Length < 1)
+                continue;
+            int d = "DRULP".IndexOf(commands[i]);
+            if(d < 0)
+            {
+                yield return "sendtochaterror!f Command " + i + " is invalid.";
+                yield break;
+            }
+            if (s.Count() > 0 && d < 4 && s.Last() < 4 && Mathf.Abs(d - s.Last()) == 2)
+                s.RemoveAt(s.Count() - 1);
+            else
+                s.Add(d);
+            if (s.Count() > 3 && s.TakeLast(4).Distinct().Count() < 2)
+                s = s.Take(s.Count() - 4).ToList();
+        }
+        if (s.Count() < 1)
+            yield return "sendtochaterror!f All commands cancel out.";
+        for(int i = 0; i < s.Count(); i++)
+        {
+            while (!pressable)
+                yield return true;
+            yield return null;
+            buttons[s[i]].OnInteract();
+            yield return null;
+            if (s[i] > 3)
+                buttons[4].OnInteractEnded();
         }
     }
 }
