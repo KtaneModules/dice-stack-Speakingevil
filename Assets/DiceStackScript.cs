@@ -17,6 +17,7 @@ public class DiceStackScript : MonoBehaviour {
 
     private readonly Vector2[] fpos = new Vector2[6] { new Vector2(-90, 0), new Vector2(0, 180), new Vector2(0, 90), new Vector2(0, 0), new Vector2(0, -90), new Vector2(90, 0)};
     private int[][] faces = new int[4][];
+    private int[][] ansfaces = new int[4][];
     private int[] sums = new int[4];
     private int dselect;
     private bool pressable = true;
@@ -62,6 +63,7 @@ public class DiceStackScript : MonoBehaviour {
             cols[i] = Colour(cols[i > 1 ? i - 1 : 0], Random.Range(1, 8));
             rots[i] = new int[2] { Random.Range(0, 4), Random.Range(0, 4)};
             ans[i] = string.Format("\n[Dice Stack #{0}] {1} on top, {2} facing down.", moduleID, faces[i][0], faces[i][1]);
+            ansfaces[i] = new int[2] { faces[i][0], faces[i][1] };
         }
         cols.Shuffle();
         for (int i = 0; i < 4; i++)
@@ -283,5 +285,67 @@ public class DiceStackScript : MonoBehaviour {
             if (s[i] > 3)
                 buttons[4].OnInteractEnded();
         }
+    }
+
+    private IEnumerator TwitchHandleForcedSolve()
+    {
+        while (!pressable) yield return true;
+        int curSel = dselect;
+        for (int i = 0; i < 4; i++)
+        {
+            if (faces[curSel][0] != ansfaces[curSel][0] || faces[curSel][1] != ansfaces[curSel][1])
+            {
+                while (dselect != curSel)
+                {
+                    buttons[4].OnInteract();
+                    buttons[4].OnInteractEnded();
+                    while (!pressable) yield return true;
+                }
+                var q = new Queue<int[]>();
+                var allMoves = new List<Movement>();
+                var startPoint = faces[curSel].ToArray();
+                q.Enqueue(startPoint);
+                while (q.Count > 0)
+                {
+                    var next = q.Dequeue();
+                    if (next[0] == ansfaces[curSel][0] && next[1] == ansfaces[curSel][1])
+                        goto readyToSubmit;
+                    for (int j = 0; j < 4; j++)
+                    {
+                        var check = RotateDice(next, j);
+                        if (!allMoves.Any(x => x.start.SequenceEqual(check)))
+                        {
+                            q.Enqueue(check);
+                            allMoves.Add(new Movement { start = next, end = check, direction = j });
+                        }
+                    }
+                }
+                throw new System.InvalidOperationException("There is a bug in the Dice Stack autosolver.");
+                readyToSubmit:
+                var lastMove = allMoves.First(x => x.end[0] == ansfaces[curSel][0] && x.end[1] == ansfaces[curSel][1]);
+                var relevantMoves = new List<Movement> { lastMove };
+                while (lastMove.start != startPoint)
+                {
+                    lastMove = allMoves.First(x => x.end.SequenceEqual(lastMove.start));
+                    relevantMoves.Add(lastMove);
+                }
+                for (int k = 0; k < relevantMoves.Count; k++)
+                {
+                    buttons[relevantMoves[relevantMoves.Count - 1 - k].direction].OnInteract();
+                    while (!pressable) yield return true;
+                }
+            }
+            curSel += 3;
+            curSel %= 4;
+        }
+        buttons[4].OnInteract();
+        while (displays[0].text != "\u2714") yield return true;
+    }
+
+    class Movement
+    {
+        public int[] start;
+        public int[] end;
+        public int direction;
     }
 }
